@@ -3,8 +3,6 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 import os
 import pickle
 
-# hello world
-
 SCOPES = ['https://www.googleapis.com/auth/gmail.modify'] 
 
 tokenDir = "token.pickle"
@@ -21,65 +19,97 @@ else:
 
 service = build('gmail', 'v1', credentials=creds)
 
-pageToken = None
+def applyLabels():
 
-counter = 0
+    pageToken = None
 
-while True:
-    response = service.users().messages().list(userId='me', pageToken=pageToken).execute() 
-    messages = response["messages"]
+    counter = 0
 
-    if not messages:
-        break
+    while True:
+        response = service.users().messages().list(userId='me', pageToken=pageToken).execute() 
+        messages = response["messages"]
 
-    for message in messages:
+        if not messages:
+            break
 
-        print(f"Counter: {counter}")
+        for message in messages:
 
-        messageId = message["id"]
-        print(f"ID: {messageId}")
+            print(f"Counter: {counter}")
 
-        messageContent = service.users().messages().get(userId='me', id=messageId).execute()
+            messageId = message["id"]
+            print(f"ID: {messageId}")
 
-        headers = messageContent["payload"]["headers"]
-        for headersDict in headers:
-            if headersDict["name"] == "From":
-                sender = headersDict["value"]
-                try:
-                    sender = sender[sender.index("<")+1:sender.index(">")]
-                except ValueError as e:
-                    print(f"Error processing sender: {e}")
-                    continue
-                senderDomain = sender.split("@")[1]
-        print(f"Sender: {sender}")
-        print(f"Sender domain: {senderDomain}")
+            messageContent = service.users().messages().get(userId='me', id=messageId).execute()
 
-        labelsList = service.users().labels().list(userId='me').execute()["labels"] # list of dicts containing data about each label
-        messageLabelsIds = messageContent["labelIds"] # list of ids of all labels applied to the message
-        
-        senderDomainLabelExists = False
-        for label in labelsList:
-            if label["name"] == senderDomain:
-                senderDomainLabelId = label["id"]
-                senderDomainLabelExists = True
-                print(f"Label '{senderDomain}' found, ID: {senderDomainLabelId}")
-        print(f"Label '{senderDomain}' exists: {senderDomainLabelExists}")
-        
-        if senderDomainLabelExists:
-            service.users().messages().modify(userId='me', id=messageId, body={"addLabelIds": [senderDomainLabelId]}).execute()
-            print(f"Applied label '{senderDomain}' with ID: {senderDomainLabelId} to email with ID: {messageId}")
+            headers = messageContent["payload"]["headers"]
+            for headersDict in headers:
+                if headersDict["name"] == "From":
+                    sender = headersDict["value"]
+                    try:
+                        sender = sender[sender.index("<")+1:sender.index(">")]
+                    except ValueError as e:
+                        print(f"Error processing sender: {e}")
+                        continue
+                    senderDomain = sender.split("@")[1]
+            print(f"Sender: {sender}")
+            print(f"Sender domain: {senderDomain}")
 
+            labelsList = service.users().labels().list(userId='me').execute()["labels"] # list of dicts containing data about each label
+            messageLabelsIds = messageContent["labelIds"] # list of ids of all labels applied to the message
+            
+            senderDomainLabelExists = False
+            for label in labelsList:
+                if label["name"] == senderDomain:
+                    senderDomainLabelId = label["id"]
+                    senderDomainLabelExists = True
+                    print(f"Label '{senderDomain}' found, ID: {senderDomainLabelId}")
+            print(f"Label '{senderDomain}' exists: {senderDomainLabelExists}")
+            
+            if senderDomainLabelExists:
+                service.users().messages().modify(userId='me', id=messageId, body={"addLabelIds": [senderDomainLabelId]}).execute()
+                print(f"Applied label '{senderDomain}' with ID: {senderDomainLabelId} to email with ID: {messageId}")
+
+            else:
+                newLabel = service.users().labels().create(userId="me", body={'name': senderDomain, 'messageListVisibility': 'show', 'labelListVisibility': 'labelShow', 'color': {'textColor': '#ffffff', 'backgroundColor': '#4a86e8'}}).execute()
+                print(f"Created label '{newLabel['name']}' with ID: {newLabel['id']}")
+                service.users().messages().modify(userId='me', id=messageId, body={"addLabelIds": [newLabel["id"]]}).execute()
+                print(f"Applied label '{newLabel['name']}' with ID: {newLabel['id']} to email with ID: {messageId}")
+
+            print()
+
+            counter += 1
+
+        pageToken = response.get("nextPageToken")
+
+        if not pageToken:
+            break
+    CreateUI()
+
+def deleteAllLabels():
+    labelsList = service.users().labels().list(userId='me').execute()["labels"] 
+    for label in labelsList:
+        if not label['type'] == 'system':
+            service.users().labels().delete(userId='me', id=label['id']).execute()
+            print(f"Deleted label '{label['name']}'")
+    CreateUI()
+
+def CreateUI():
+    while True:
+        choice = input("""
+Enter action ID:
+                       
+ID | Action
+---|--------------------------------------------
+ 1 | Apply labels
+ 2 | Delte labels (does not delete emails)
+
+>>> """)
+        if choice == "1":
+            applyLabels()
+        elif choice == "2":
+            deleteAllLabels()
         else:
-            newLabel = service.users().labels().create(userId="me", body={'name': senderDomain, 'messageListVisibility': 'show', 'labelListVisibility': 'labelShow', 'color': {'textColor': '#ffffff', 'backgroundColor': '#4a86e8'}}).execute()
-            print(f"Created label '{newLabel['name']}' with ID: {newLabel['id']}")
-            service.users().messages().modify(userId='me', id=messageId, body={"addLabelIds": [newLabel["id"]]}).execute()
-            print(f"Applied label '{newLabel['name']}' with ID: {newLabel['id']} to email with ID: {messageId}")
+            print("Error: invalid input")
 
-        print()
-
-        counter += 1
-
-    pageToken = response.get("nextPageToken")
-
-    if not pageToken:
-        break
+if __name__ == "__main__":
+    CreateUI()
