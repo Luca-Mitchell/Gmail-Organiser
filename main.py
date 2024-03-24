@@ -101,7 +101,7 @@ Enter action ID:
 ID | Action
 ---|--------------------------------------------
  1 | Apply labels
- 2 | Delte labels (does not delete emails)
+ 2 | Delete labels (does not delete emails)
 
 >>> """)
         if choice == "1":
